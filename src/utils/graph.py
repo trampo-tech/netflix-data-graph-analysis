@@ -45,7 +45,7 @@ class Grafo:
             peso (float): Peso da aresta.
         """
         if peso < 0:
-            raise Exception("Pesos negativos não são permitidos.")
+            raise ValueError("Pesos negativos não são permitidos.")
 
         if u not in self.adj_list:
             self.adiciona_vertice(u)
@@ -78,9 +78,12 @@ class Grafo:
             u: Vértice de origem.
             v: Vértice de destino.
         """
-        if self.tem_aresta(u, v):
+        if u!=v and self.tem_aresta(u, v):
             self.adj_list[u] = [(v2, p) for v2, p in self.adj_list[u] if v2 != v]
             self.tamanho -= 1
+        
+        if u!=v and not self.direcionado and self.tem_aresta(v,u):
+            self.adj_list[v] = [(v2, p) for v2, p in self.adj_list[u] if v2 != u]
 
     def remove_vertice(self, u):
         """
@@ -148,7 +151,10 @@ class Grafo:
         Returns:
             int: Grau total.
         """
-        return self.grau_entrada(u) + self.grau_saida(u)
+        if self.direcionado:
+            return self.grau_entrada(u) + self.grau_saida(u)
+        else:
+            return len(self.adj_list.get(u, []))
 
     def get_peso(self, u, v):
         """
@@ -192,10 +198,16 @@ class Grafo:
         Returns:
             dict: Vértices e seus graus de entrada.
         """
+        if not self.direcionado:
+            # For undirected graphs, in-degree = out-degree = degree
+            return self.maiores_graus_saida(num_lista)
+        
+        # Calculate in-degrees for directed graphs
         in_degrees = defaultdict(int)
         for _, vizinhos in self.adj_list.items():
             for v, _ in vizinhos:
                 in_degrees[v] += 1
+        
         top_n_vertices = heapq.nlargest(num_lista, in_degrees.items(), key=lambda x: x[1])
         return dict(top_n_vertices)
 

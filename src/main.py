@@ -27,6 +27,9 @@ df = df.with_columns(
 df_exploded = df.explode(columns=['director']).explode(columns='cast')
 
 
+grafo_direcionado = Grafo(direcionado=True)
+
+
 def main():
     print("Hello from netflix-data-graph-analysis!")
 
