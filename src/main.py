@@ -26,6 +26,7 @@ df = df.with_columns(
 # every row is now a director -> cast
 df_exploded = df.explode(columns=['director']).explode(columns='cast')
 
+
 def main():
     print("Hello from netflix-data-graph-analysis!")
 
