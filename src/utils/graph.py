@@ -2,6 +2,7 @@ from collections import defaultdict
 import pickle
 import heapq
 
+
 class Grafo:
     """
     Classe para representar um grafo.
@@ -12,6 +13,7 @@ class Grafo:
         ordem (int): Ordem do grafo (número de vértices).
         tamanho (int): Tamanho do grafo (número de arestas).
     """
+
     def __init__(self, direcionado: bool):
         """
         Inicializa o grafo.
@@ -35,12 +37,12 @@ class Grafo:
             self.adj_list[u] = []
             self.ordem += 1
 
-    def adiciona_aresta(self, u, v, peso : float):
+    def adiciona_aresta(self, u, v, peso: float):
         """
         Adiciona uma aresta ao grafo.
 
         Args:
-            u: Vértice de origem. Se 
+            u: Vértice de origem. Se
             v: Vértice de destino.
             peso (float): Peso da aresta.
         """
@@ -51,7 +53,7 @@ class Grafo:
             self.adiciona_vertice(u)
         if v not in self.adj_list:
             self.adiciona_vertice(v)
-        
+
         if not self.direcionado:
             for i, (vizinho, peso_atual) in enumerate(self.adj_list[v]):
                 if vizinho == u:
@@ -59,7 +61,6 @@ class Grafo:
                     break
             else:
                 self.adj_list[v].append((u, peso))
-        
 
         for i, (vizinho, peso_atual) in enumerate(self.adj_list[u]):
             if vizinho == v:
@@ -67,8 +68,7 @@ class Grafo:
                 break
         else:
             self.adj_list[u].append((v, peso))
-            self.tamanho += 1 # só adiciona ao tamanho uma unica vez
-                
+            self.tamanho += 1  # só adiciona ao tamanho uma unica vez
 
     def remove_aresta(self, u, v):
         """
@@ -78,11 +78,11 @@ class Grafo:
             u: Vértice de origem.
             v: Vértice de destino.
         """
-        if u!=v and self.tem_aresta(u, v):
+        if u != v and self.tem_aresta(u, v):
             self.adj_list[u] = [(v2, p) for v2, p in self.adj_list[u] if v2 != v]
             self.tamanho -= 1
-        
-        if u!=v and not self.direcionado and self.tem_aresta(v,u):
+
+        if u != v and not self.direcionado and self.tem_aresta(v, u):
             self.adj_list[v] = [(v2, p) for v2, p in self.adj_list[u] if v2 != u]
 
     def remove_vertice(self, u):
@@ -99,7 +99,7 @@ class Grafo:
             for _, vizinhos in self.adj_list.items():
                 original_len = len(vizinhos)
                 vizinhos[:] = [(v, p) for v, p in vizinhos if v != u]
-                self.tamanho -= (original_len - len(vizinhos))
+                self.tamanho -= original_len - len(vizinhos)
 
     def tem_aresta(self, vertice1, vertice2):
         """
@@ -185,10 +185,12 @@ class Grafo:
             saida_u = self.grau_saida(u)
             vertices[u] = saida_u
 
-        top_n_vertices = heapq.nlargest(num_lista, vertices.keys(), key=lambda x: vertices[x])
+        top_n_vertices = heapq.nlargest(
+            num_lista, vertices.keys(), key=lambda x: vertices[x]
+        )
         top_n_dict = {i: vertices[i] for i in top_n_vertices}
         return top_n_dict
-    
+
     def maiores_graus_entrada(self, num_lista=20):
         """
         Retorna os vértices com maiores graus de entrada.
@@ -201,17 +203,19 @@ class Grafo:
         if not self.direcionado:
             # For undirected graphs, in-degree = out-degree = degree
             return self.maiores_graus_saida(num_lista)
-        
+
         # Calculate in-degrees for directed graphs
         in_degrees = defaultdict(int)
         for _, vizinhos in self.adj_list.items():
             for v, _ in vizinhos:
                 in_degrees[v] += 1
-        
-        top_n_vertices = heapq.nlargest(num_lista, in_degrees.items(), key=lambda x: x[1])
+
+        top_n_vertices = heapq.nlargest(
+            num_lista, in_degrees.items(), key=lambda x: x[1]
+        )
         return dict(top_n_vertices)
 
-    def imprime_lista_adjacencias(self, str_return = False) -> str:
+    def imprime_lista_adjacencias(self, str_return=False) -> str:
         """
         Imprime a lista de adjacências do grafo.
 
@@ -233,6 +237,29 @@ class Grafo:
         else:
             return ""
 
+    def inverter_grafo(self):
+        """
+        Retorna um novo grafo com todas as arestas invertidas.
+
+        Returns:
+            Grafo: Novo grafo com arestas invertidas.
+        """
+        if not self.direcionado:
+            raise ValueError("Não é possível inverter um grafo não direcionado.")
+
+        grafo_invertido = Grafo(direcionado=True)
+
+        # Adiciona todos os vértices primeiro
+        for vertice in self.adj_list.keys():
+            grafo_invertido.adiciona_vertice(vertice)
+
+        # Inverte todas as arestas
+        for u, vizinhos in self.adj_list.items():
+            for v, peso in vizinhos:
+                grafo_invertido.adiciona_aresta(u=v, v=u, peso=peso)
+
+        return grafo_invertido
+
     def pickle_graph(self, file_path: str):
         """
         Salva o grafo em um arquivo usando pickle.
@@ -240,9 +267,9 @@ class Grafo:
         Args:
             file_path (str): Caminho do arquivo para salvar.
         """
-        with open(file_path, 'wb+') as f:
+        with open(file_path, "wb+") as f:
             pickle.dump(self, f, pickle.HIGHEST_PROTOCOL)
-        
+
     @classmethod
     def load_pickled_graph(cls, file_path: str):
         """
@@ -253,5 +280,5 @@ class Grafo:
         Returns:
             Grafo: Instância do grafo carregado.
         """
-        with open(file_path, 'rb+') as f:
+        with open(file_path, "rb+") as f:
             return pickle.load(f)
