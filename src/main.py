@@ -2,8 +2,6 @@
 import polars as pl
 from utils.graph import Grafo
 from itertools import combinations
-from heapq import heappush, heappop, heapify
-
 
 def load_data(path):
     initial_df = pl.read_csv(path)
@@ -36,7 +34,6 @@ def dfs_componente(grafo: Grafo, source_node, visited, componente):
     for adj, _ in grafo.adj_list[source_node]:
         if adj not in visited:
             dfs_componente(grafo, adj, visited, componente)
-
 
 def kosaraju(grafo: Grafo):
     if not grafo.direcionado:
@@ -89,6 +86,41 @@ def closeness_centrality(grafo, vertice):
         return 0
     return (len(dist) - 1) / soma
 
+def agm_componente(self, x):
+    """
+    Retorna a AGM da componente que contém x, e o custo total.
+    Só funciona em grafo não-direcionado.
+    """
+    if self.direcionado:
+        raise ValueError("AGM só em grafo não-direcionado.")
+    if x not in self.adj_list:
+        raise KeyError(f"Vértice {x} não existe.")
+
+    # 1) extrair componente conexa
+    visited = set()
+    componente = []
+    # você já tem dfs_componente; se estiver aqui no módulo, chame-a:
+    dfs_componente(self, x, visited, componente)
+
+    # 2) Prim a partir de x
+    visited = {x}
+    heap = [(peso, x, v) for v, peso in self.adj_list[x]]
+    heapq.heapify(heap)
+
+    mst = []
+    total = 0.0
+    while heap and len(visited) < len(componente):
+        peso, u, v = heapq.heappop(heap)
+        if v in visited:
+            continue
+        visited.add(v)
+        mst.append((u, v, peso))
+        total += peso
+        for w, pw in self.adj_list[v]:
+            if w not in visited:
+                heapq.heappush(heap, (pw, v, w))
+
+    return mst, total
 
 def betweenness_centrality(grafo):
     centralidade = {v: 0 for v in grafo.adj_list}
