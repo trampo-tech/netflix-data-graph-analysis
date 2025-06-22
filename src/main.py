@@ -7,6 +7,7 @@ from heapq import heappush, heappop, heapify
 def load_data(path):
     initial_df = pl.read_csv(path)
     df = initial_df.select('show_id', 'director', 'cast').drop_nulls()
+
     df = df.with_columns(
         pl.col("director")
         .str.split(",")
@@ -52,15 +53,17 @@ def kosaraju(grafo: Grafo):
             componentes_fortemente_conexas.append(componente)
     return componentes_fortemente_conexas
 
-# Algoritmos de centralidade
-
 def dijkstra(grafo, origem):
     distancias = {v: float("inf") for v in grafo.adj_list}
     distancias[origem] = 0
+    visitados = set()
     fila = [(0, origem)]
     heapify(fila)
     while fila:
         dist, atual = heappop(fila)
+        if atual in visitados:
+            continue
+        visitados.add(atual)
         for vizinho, peso in grafo.adj_list[atual]:
             nova_dist = dist + peso
             if nova_dist < distancias[vizinho]:
@@ -69,7 +72,8 @@ def dijkstra(grafo, origem):
     return distancias
 
 def degree_centrality(grafo, vertice):
-    return len(grafo.adj_list.get(vertice, [])) / (len(grafo.adj_list) - 1) if len(grafo.adj_list) > 1 else 0
+    grau = len(grafo.adj_list.get(vertice, []))
+    return grau / (len(grafo.adj_list) - 1) if len(grafo.adj_list) > 1 else 0
 
 def closeness_centrality(grafo, vertice):
     dist = dijkstra(grafo, vertice)
@@ -105,9 +109,31 @@ def betweenness_centrality(grafo):
         centralidade[v] /= normalizador if normalizador else 1
     return centralidade
 
+# NOVA FUNÇÃO: contar componentes conexas (DFS iterativa)
+def contar_componentes_conexas(grafo: Grafo) -> int:
+    if grafo.direcionado:
+        raise ValueError("Esta função só deve ser usada com grafos não-direcionados.")
+    
+    visitados = set()
+    componentes = 0
+
+    for vertice in grafo.adj_list:
+        if vertice not in visitados:
+            stack = [vertice]
+            while stack:
+                atual = stack.pop()
+                if atual not in visitados:
+                    visitados.add(atual)
+                    for vizinho, _ in grafo.adj_list[atual]:
+                        if vizinho not in visitados:
+                            stack.append(vizinho)
+            componentes += 1
+
+    return componentes
+
 # %%
 def main():
-    df = load_data("netflix-data-graph-analysis/data/netflix_amazon_disney_titles.csv")
+    df = load_data("data/netflix_amazon_disney_titles.csv")
     print(df.head())
 
     df_exploded = df.explode(columns=['director']).explode(columns='cast')
@@ -125,6 +151,7 @@ def main():
         for i in range(len(elenco)):
             for j in range(i + 1, len(elenco)):
                 grafo_nao_direcionado.adiciona_aresta(elenco[i], elenco[j], peso=1)
+
     print(f"Vértices (não-direcionado): {grafo_nao_direcionado.ordem}")
     print(f"Arestas (não-direcionado): {grafo_nao_direcionado.tamanho}")
 
@@ -168,6 +195,10 @@ def main():
     print("\nTop 10 Intermediação:")
     for v, val in sorted(intermed_nd.items(), key=lambda x: x[1], reverse=True)[:10]:
         print(f"{v}: {val:.4f}")
+
+    # NOVA CHAMADA
+    num_componentes = contar_componentes_conexas(grafo_nao_direcionado)
+    print(f"\nNúmero de componentes conexas no grafo não-direcionado: {num_componentes}")
 
 # %%
 main()
