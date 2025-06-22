@@ -1,12 +1,13 @@
-#%%
+# %%
 import polars as pl
 from utils.graph import Grafo
 from itertools import combinations
 from heapq import heappush, heappop, heapify
 
+
 def load_data(path):
     initial_df = pl.read_csv(path)
-    df = initial_df.select('show_id', 'director', 'cast').drop_nulls()
+    df = initial_df.select("show_id", "director", "cast").drop_nulls()
 
     df = df.with_columns(
         pl.col("director")
@@ -16,9 +17,10 @@ def load_data(path):
         pl.col("cast")
         .str.split(",")
         .list.eval(pl.element().str.strip_chars().str.to_uppercase())
-        .alias("cast")
+        .alias("cast"),
     )
     return df
+
 
 def dfs_order(grafo: Grafo, source_node, visited, stack):
     visited.add(source_node)
@@ -27,12 +29,14 @@ def dfs_order(grafo: Grafo, source_node, visited, stack):
             dfs_order(grafo, adj, visited, stack)
     stack.append(source_node)
 
+
 def dfs_componente(grafo: Grafo, source_node, visited, componente):
     visited.add(source_node)
     componente.append(source_node)
     for adj, _ in grafo.adj_list[source_node]:
         if adj not in visited:
             dfs_componente(grafo, adj, visited, componente)
+
 
 def kosaraju(grafo: Grafo):
     if not grafo.direcionado:
@@ -53,6 +57,7 @@ def kosaraju(grafo: Grafo):
             componentes_fortemente_conexas.append(componente)
     return componentes_fortemente_conexas
 
+
 def dijkstra(grafo, origem):
     distancias = {v: float("inf") for v in grafo.adj_list}
     distancias[origem] = 0
@@ -71,9 +76,11 @@ def dijkstra(grafo, origem):
                 heappush(fila, (nova_dist, vizinho))
     return distancias
 
+
 def degree_centrality(grafo, vertice):
     grau = len(grafo.adj_list.get(vertice, []))
     return grau / (len(grafo.adj_list) - 1) if len(grafo.adj_list) > 1 else 0
+
 
 def closeness_centrality(grafo, vertice):
     dist = dijkstra(grafo, vertice)
@@ -81,6 +88,7 @@ def closeness_centrality(grafo, vertice):
     if soma == 0:
         return 0
     return (len(dist) - 1) / soma
+
 
 def betweenness_centrality(grafo):
     centralidade = {v: 0 for v in grafo.adj_list}
@@ -96,7 +104,7 @@ def betweenness_centrality(grafo):
                 anterior = min(
                     (n for n, _ in grafo.adj_list[atual]),
                     key=lambda n: dist.get(n, float("inf")),
-                    default=None
+                    default=None,
                 )
                 if anterior is None or dist[anterior] >= dist[atual]:
                     break
@@ -109,11 +117,10 @@ def betweenness_centrality(grafo):
         centralidade[v] /= normalizador if normalizador else 1
     return centralidade
 
-# NOVA FUNÇÃO: contar componentes conexas (DFS iterativa)
 def contar_componentes_conexas(grafo: Grafo) -> int:
     if grafo.direcionado:
         raise ValueError("Esta função só deve ser usada com grafos não-direcionados.")
-    
+
     visitados = set()
     componentes = 0
 
@@ -131,15 +138,18 @@ def contar_componentes_conexas(grafo: Grafo) -> int:
 
     return componentes
 
+
 # %%
 def main():
+    # * Carregar dados
     df = load_data("data/netflix_amazon_disney_titles.csv")
     print(df.head())
 
-    df_exploded = df.explode(columns=['director']).explode(columns='cast')
+    # * ex1 criação dos grafos
+    df_exploded = df.explode(columns=["director"]).explode(columns="cast")
     grafo_direcionado = Grafo(direcionado=True)
     for row in df_exploded.iter_rows(named=True):
-        grafo_direcionado.adiciona_aresta(row['cast'], row['director'], peso=1)
+        grafo_direcionado.adiciona_aresta(row["cast"], row["director"], peso=1)
     print(f"Vértices (direcionado): {grafo_direcionado.ordem}")
     print(f"Arestas (direcionado): {grafo_direcionado.tamanho}")
 
@@ -155,16 +165,21 @@ def main():
     print(f"Vértices (não-direcionado): {grafo_nao_direcionado.ordem}")
     print(f"Arestas (não-direcionado): {grafo_nao_direcionado.tamanho}")
 
+    #* ex2 Componentes
     componentes = kosaraju(grafo=grafo_direcionado)
     print(f"Número de componentes fortemente conexas: {len(componentes)}")
     print("Componentes com mais de 1 vértice:")
     for componente in componentes:
         if len(componente) > 1:
             print(componente)
-    
-  #* ex3: AGM da componente contendo X
+    num_componentes = contar_componentes_conexas(grafo_nao_direcionado)
+    print(
+        f"\nNúmero de componentes conexas no grafo não-direcionado: {num_componentes}"
+    )
+
+    # * ex3: AGM da componente contendo X
     X = next(iter(grafo_nao_direcionado.adj_list))  # ou defina X explicitamente
-    mst_edges, mst_cost = agm_componente(grafo_nao_direcionado, X)
+    mst_edges, mst_cost = grafo_nao_direcionado.agm_componente(X)
     print(f"\nAGM da componente contendo '{X}':")
     for u, v, p in mst_edges:
         print(f"  {u} -- {v} (peso={p})")
@@ -172,12 +187,17 @@ def main():
 
     # CENTRALIDADE: GRAFO DIRECIONADO
     print("\n--- Centralidade no Grafo Direcionado ---")
-    graus = {v: degree_centrality(grafo_direcionado, v) for v in grafo_direcionado.adj_list}
+    graus = {
+        v: degree_centrality(grafo_direcionado, v) for v in grafo_direcionado.adj_list
+    }
     print("Top 10 Grau:")
     for v, val in sorted(graus.items(), key=lambda x: x[1], reverse=True)[:10]:
         print(f"{v}: {val:.4f}")
 
-    proximidade = {v: closeness_centrality(grafo_direcionado, v) for v in list(grafo_direcionado.adj_list)[:100]}
+    proximidade = {
+        v: closeness_centrality(grafo_direcionado, v)
+        for v in list(grafo_direcionado.adj_list)[:100]
+    }
     print("\nTop 10 Proximidade:")
     for v, val in sorted(proximidade.items(), key=lambda x: x[1], reverse=True)[:10]:
         print(f"{v}: {val:.4f}")
@@ -189,12 +209,18 @@ def main():
 
     # CENTRALIDADE: GRAFO NÃO-DIRECIONADO
     print("\n--- Centralidade no Grafo Não-Direcionado ---")
-    graus_nd = {v: degree_centrality(grafo_nao_direcionado, v) for v in grafo_nao_direcionado.adj_list}
+    graus_nd = {
+        v: degree_centrality(grafo_nao_direcionado, v)
+        for v in grafo_nao_direcionado.adj_list
+    }
     print("Top 10 Grau:")
     for v, val in sorted(graus_nd.items(), key=lambda x: x[1], reverse=True)[:10]:
         print(f"{v}: {val:.4f}")
 
-    proximidade_nd = {v: closeness_centrality(grafo_nao_direcionado, v) for v in list(grafo_nao_direcionado.adj_list)[:100]}
+    proximidade_nd = {
+        v: closeness_centrality(grafo_nao_direcionado, v)
+        for v in list(grafo_nao_direcionado.adj_list)[:100]
+    }
     print("\nTop 10 Proximidade:")
     for v, val in sorted(proximidade_nd.items(), key=lambda x: x[1], reverse=True)[:10]:
         print(f"{v}: {val:.4f}")
@@ -204,9 +230,8 @@ def main():
     for v, val in sorted(intermed_nd.items(), key=lambda x: x[1], reverse=True)[:10]:
         print(f"{v}: {val:.4f}")
 
-    # NOVA CHAMADA
-    num_componentes = contar_componentes_conexas(grafo_nao_direcionado)
-    print(f"\nNúmero de componentes conexas no grafo não-direcionado: {num_componentes}")
+    
+
 
 # %%
 main()

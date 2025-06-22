@@ -296,7 +296,6 @@ class Grafo:
         # 1) extrair componente conexa
         visited = set()
         componente = []
-        # você já tem dfs_componente; se estiver aqui no módulo, chame-a:
         dfs_componente(self, x, visited, componente)
 
         # 2) Prim a partir de x
