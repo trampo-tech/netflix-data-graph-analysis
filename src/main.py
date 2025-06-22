@@ -1,6 +1,11 @@
 import polars as pl
 from utils.graph import Grafo
 import heapq
+import random
+import collections
+import multiprocessing
+from functools import partial
+
 
 def load_data(path):
     initial_df = pl.read_csv(path)
@@ -84,10 +89,27 @@ def degree_centrality(grafo, vertice):
 
 def closeness_centrality(grafo, vertice):
     dist = dijkstra(grafo, vertice)
-    soma = sum(d for d in dist.values() if d != float("inf") and d > 0)
-    if soma == 0:
-        return 0
-    return (len(dist) - 1) / soma
+
+    reachable_dists = [d for d in dist.values() if d != float("inf")]
+    n_reachable = len(reachable_dists)
+
+    if n_reachable <= 1:
+        return 0.0
+
+    soma_dist = sum(reachable_dists)
+    if soma_dist == 0:
+        return 0.0
+
+    closeness = (n_reachable - 1) / soma_dist
+
+    n_total = len(grafo.adj_list)
+    if n_total > 1:
+        normalization_factor = (n_reachable - 1) / (n_total - 1)
+        normalized_closeness = closeness * normalization_factor
+    else:
+        normalized_closeness = 0.0
+
+    return normalized_closeness
 
 def agm_componente(self, x):
     """
@@ -125,32 +147,92 @@ def agm_componente(self, x):
 
     return mst, total
 
-def betweenness_centrality(grafo):
-    centralidade = {v: 0 for v in grafo.adj_list}
+
+def _brandes_centrality_subset(nodes_to_process, grafo):
+    """Helper function for multiprocessing. Calculates centrality for a subset of nodes."""
+    centrality = {v: 0.0 for v in grafo.adj_list}
+    
+    for s in nodes_to_process:
+        # Single-source shortest paths (SSSP)
+        S = []
+        P = {w: [] for w in grafo.adj_list}
+        sigma = {w: 0.0 for w in grafo.adj_list}
+        sigma[s] = 1.0
+        d = {w: -1 for w in grafo.adj_list}
+        d[s] = 0
+        
+        Q = collections.deque([s])
+
+        while Q:
+            v = Q.popleft()
+            S.append(v)
+            # Assuming unweighted graph based on usage, peso=1
+            for w, _ in grafo.adj_list.get(v, []):
+                if d[w] < 0:
+                    Q.append(w)
+                    d[w] = d[v] + 1
+                if d[w] == d[v] + 1:
+                    sigma[w] += sigma[v]
+                    P[w].append(v)
+        
+        # Accumulation
+        delta = {w: 0.0 for w in grafo.adj_list}
+        while S:
+            w = S.pop()
+            for v in P[w]:
+                if sigma[w] != 0:
+                    delta[v] += (sigma[v] / sigma[w]) * (1.0 + delta[w])
+            if w != s:
+                centrality[w] += delta[w]
+                
+    return centrality
+
+def betweenness_centrality(grafo, k=None, normalized=True, endpoints=False):
+    """Brandes' algorithm for betweenness centrality, parallelized for CPU."""
     vertices = list(grafo.adj_list.keys())
-    for s in vertices:
-        dist = dijkstra(grafo, s)
-        for t in vertices:
-            if s == t or dist[t] == float("inf"):
-                continue
-            caminho = [t]
-            atual = t
-            while atual != s:
-                anterior = min(
-                    (n for n, _ in grafo.adj_list[atual]),
-                    key=lambda n: dist.get(n, float("inf")),
-                    default=None,
-                )
-                if anterior is None or dist[anterior] >= dist[atual]:
-                    break
-                caminho.append(anterior)
-                atual = anterior
-            for nodo in caminho[1:-1]:
-                centralidade[nodo] += 1
-    normalizador = ((len(vertices) - 1) * (len(vertices) - 2)) / 2
-    for v in centralidade:
-        centralidade[v] /= normalizador if normalizador else 1
-    return centralidade
+    if k is not None:
+        nodes_to_process = random.sample(vertices, k)
+    else:
+        nodes_to_process = vertices
+
+    try:
+        num_cores = multiprocessing.cpu_count()
+    except NotImplementedError:
+        num_cores = 1 # Fallback for environments where cpu_count is not available
+
+    if num_cores <= 1 or len(nodes_to_process) < 100: # Don't parallelize for small workloads
+        # Run serially if only one core or small graph
+        centrality = _brandes_centrality_subset(nodes_to_process, grafo)
+    else:
+        # Split the nodes to process among the cores
+        chunk_size = max(1, len(nodes_to_process) // num_cores)
+        node_chunks = [nodes_to_process[i:i + chunk_size] for i in range(0, len(nodes_to_process), chunk_size)]
+
+        with multiprocessing.Pool(processes=num_cores) as pool:
+            worker_func = partial(_brandes_centrality_subset, grafo=grafo)
+            partial_centralities = pool.map(worker_func, node_chunks)
+
+        # Aggregate the results from all processes
+        centrality = {v: 0.0 for v in vertices}
+        for partial_result in partial_centralities:
+            for v, c in partial_result.items():
+                centrality[v] += c
+
+    # Normalization
+    if normalized:
+        n = len(vertices)
+        if n < 2:
+            return centrality
+        
+        if grafo.direcionado:
+            scale = 1.0 / ((n - 1) * (n - 2)) if n > 2 else 1.0
+        else:
+            scale = 1.0 / (((n - 1) * (n - 2)) / 2.0) if n > 2 else 1.0
+            
+        for v in centrality:
+            centrality[v] *= scale
+
+    return centrality
 
 def contar_componentes_conexas(grafo: Grafo) -> int:
     if grafo.direcionado:
@@ -237,10 +319,10 @@ def main():
     print("Top 10 Grau:")
     for v, val in sorted(graus_nd.items(), key=lambda x: x[1], reverse=True)[:10]:
         print(f"{v}: {val:.4f}")
-        proximidade_nd = {
-        v: closeness_centrality(grafo_nao_direcionado, v)
-        for v in list(grafo_nao_direcionado.adj_list)[:100]
-    }
+    proximidade_nd = {
+    v: closeness_centrality(grafo_nao_direcionado, v)
+    for v in list(grafo_nao_direcionado.adj_list)[:100]
+}
     print("\nTop 10 Proximidade:")
     for v, val in sorted(proximidade_nd.items(), key=lambda x: x[1], reverse=True)[:10]:
         print(f"{v}: {val:.4f}")
