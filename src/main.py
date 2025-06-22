@@ -1,5 +1,7 @@
+#%%
 import polars as pl
 from utils.graph import Grafo
+from itertools import combinations
 
 def load_data(path):
     # load dataset and cleanup
@@ -83,13 +85,13 @@ def kosaraju(grafo: Grafo):
             dfs_componente(grafo_invertido, vertice, visited, componente)
             componentes_fortemente_conexas.append(componente)
     
-    return componentes_fortemente_conexas
+    return componentes_fortemente_conexas 
 
-
+# %% 
 def main():
 
-    df= load_data("../data/netflix_amazon_disney_titles.csv")
-
+    df= load_data("data/netflix_amazon_disney_titles.csv")
+    print(df.head())
     #* ex1: 
     df_exploded = df.explode(columns=['director']).explode(columns='cast')
     # every row is now a director -> cast in df_exploded
@@ -102,7 +104,28 @@ def main():
     print(f"Quantidade de vértices do grafo direcionado: {grafo_direcionado.ordem}")
     print(f"Quantidade de arestas do grafo direcionado: {grafo_direcionado.tamanho}")
 
+
+    grafo_nao_direcionado = Grafo(direcionado=False)
+
+    for row in df.iter_rows(named=True):
+        elenco = row["cast"]
+        n = len(elenco)
+        if n < 2:
+            continue  
+
+        for i in range(n):
+            for j in range(i + 1, n):  
+                ator1 = elenco[i]
+                ator2 = elenco[j]
+                grafo_nao_direcionado.adiciona_aresta(ator1, ator2, peso=1)
+
+    print(f"Quantidade de vértices do grafo não-direcionado: {grafo_nao_direcionado.ordem}")
+    print(f"Quantidade de arestas do grafo não-direcionado: {grafo_nao_direcionado.tamanho}")
+
+    
+
     #* ex2:
+    
     componentes = kosaraju(grafo=grafo_direcionado)
     print(f"Número de componente fortemente conexos: {len(componentes)}")
     # existem menos componentes que vertices, considerando a regra de criação desse grafo
@@ -115,6 +138,6 @@ def main():
 
 
     
-
-if __name__ == "__main__":
-    main()
+#%%
+main()
+# %%
