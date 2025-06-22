@@ -1,6 +1,5 @@
 import polars as pl
 from utils.graph import Grafo
-from itertools import combinations
 import heapq
 
 def load_data(path):
@@ -128,7 +127,7 @@ def agm_componente(self, x):
 
 def betweenness_centrality(grafo):
     centralidade = {v: 0 for v in grafo.adj_list}
-    vertices = list(grafo.adj_list.keys())[:100]#APENAS OS 100 PRIMEIROS VÉRTICES PARA EVITAR EXCESSO DE CÁLCULOS
+    vertices = list(grafo.adj_list.keys())
     for s in vertices:
         dist = dijkstra(grafo, s)
         for t in vertices:
@@ -177,8 +176,7 @@ def contar_componentes_conexas(grafo: Grafo) -> int:
 
 def main():
     # * Carregar dados
-    df = load_data("../data/netflix_amazon_disney_titles.csv")
-    print(df.head())
+    df = load_data("data/netflix_amazon_disney_titles.csv")
 
     # * ex1 criação dos grafos
     df_exploded = df.explode(columns=["director"]).explode(columns="cast")
@@ -203,10 +201,7 @@ def main():
     #* ex2 Componentes
     componentes = kosaraju(grafo=grafo_direcionado)
     print(f"Número de componentes fortemente conexas: {len(componentes)}")
-    print("Componentes com mais de 1 vértice:")
-    for componente in componentes:
-        if len(componente) > 1:
-            print(componente)
+
     num_componentes = contar_componentes_conexas(grafo_nao_direcionado)
     print(
         f"\nNúmero de componentes conexas no grafo não-direcionado: {num_componentes}"
@@ -258,10 +253,10 @@ def main():
         
     # * ex3: AGM da componente contendo X
     X = next(iter(grafo_nao_direcionado.adj_list))  # ou defina X explicitamente
-    mst_edges, mst_cost = agm_componente(grafo_nao_direcionado, X)
+    _, mst_cost = agm_componente(grafo_nao_direcionado, X)
     print(f"\nAGM da componente contendo '{X}':")
-    for u, v, p in mst_edges:
-        print(f"  {u} -- {v} (peso={p})")
+    # for u, v, p in mst_edges:
+    #     print(f"  {u} -- {v} (peso={p})")
     print(f"Custo total da AGM: {mst_cost}")
     
 
