@@ -161,6 +161,14 @@ def main():
     for componente in componentes:
         if len(componente) > 1:
             print(componente)
+    
+  #* ex3: AGM da componente contendo X
+    X = next(iter(grafo_nao_direcionado.adj_list))  # ou defina X explicitamente
+    mst_edges, mst_cost = agm_componente(grafo_nao_direcionado, X)
+    print(f"\nAGM da componente contendo '{X}':")
+    for u, v, p in mst_edges:
+        print(f"  {u} -- {v} (peso={p})")
+    print(f"Custo total da AGM: {mst_cost}")
 
     # CENTRALIDADE: GRAFO DIRECIONADO
     print("\n--- Centralidade no Grafo Direcionado ---")
