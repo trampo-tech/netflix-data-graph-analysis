@@ -1,4 +1,3 @@
-# %%
 import polars as pl
 from utils.graph import Grafo
 from itertools import combinations
@@ -139,10 +138,9 @@ def contar_componentes_conexas(grafo: Grafo) -> int:
     return componentes
 
 
-# %%
 def main():
     # * Carregar dados
-    df = load_data("data/netflix_amazon_disney_titles.csv")
+    df = load_data("../data/netflix_amazon_disney_titles.csv")
     print(df.head())
 
     # * ex1 criação dos grafos
@@ -158,9 +156,9 @@ def main():
         elenco = row["cast"]
         if len(elenco) < 2:
             continue
-        for i in range(len(elenco)):
+        for i, ator_i in enumerate(elenco):
             for j in range(i + 1, len(elenco)):
-                grafo_nao_direcionado.adiciona_aresta(elenco[i], elenco[j], peso=1)
+                grafo_nao_direcionado.adiciona_aresta(ator_i, elenco[j], peso=1)
 
     print(f"Vértices (não-direcionado): {grafo_nao_direcionado.ordem}")
     print(f"Arestas (não-direcionado): {grafo_nao_direcionado.tamanho}")
@@ -233,6 +231,4 @@ def main():
     
 
 
-# %%
 main()
-# %%

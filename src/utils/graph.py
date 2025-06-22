@@ -259,6 +259,41 @@ class Grafo:
                 grafo_invertido.adiciona_aresta(u=v, v=u, peso=peso)
 
         return grafo_invertido
+    
+    def todos_os_graus(self):
+        """
+        Returns:
+            dict: Dicionário com os graus de cada vértice.
+                Para grafos direcionados: {'vertice': {'entrada': int, 'saida': int, 'total': int}}
+                Para grafos não-direcionados: {'vertice': int}
+        """
+        if self.direcionado:
+            graus_entrada = defaultdict(int)
+            graus_saida = {}
+            
+            # única passada pela lista de adjacências para calcular tudo
+            for u, vizinhos in self.adj_list.items():
+                graus_saida[u] = len(vizinhos)
+                
+                for v, _ in vizinhos:
+                    graus_entrada[v] += 1
+            
+            resultado = {}
+            for vertice in self.adj_list.keys():
+                entrada = graus_entrada[vertice]
+                saida = graus_saida[vertice]
+                resultado[vertice] = {
+                    'entrada': entrada,
+                    'saida': saida,
+                    'total': entrada + saida
+                }
+            
+            return resultado
+        
+        else:
+            # Para grafos não-direcionados, grau = número de vizinhos
+            return {u: len(vizinhos) for u, vizinhos in self.adj_list.items()}
+
 
     def pickle_graph(self, file_path: str):
         """
