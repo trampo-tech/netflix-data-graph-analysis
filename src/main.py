@@ -1,8 +1,7 @@
 import polars as pl
 from utils.graph import Grafo
 from itertools import combinations
-from heapq import heappush, heappop, heapify
-
+import heapq
 
 def load_data(path):
     initial_df = pl.read_csv(path)
@@ -30,12 +29,15 @@ def dfs_order(grafo: Grafo, source_node, visited, stack):
 
 
 def dfs_componente(grafo: Grafo, source_node, visited, componente):
-    visited.add(source_node)
-    componente.append(source_node)
-    for adj, _ in grafo.adj_list[source_node]:
-        if adj not in visited:
-            dfs_componente(grafo, adj, visited, componente)
-
+    stack = [source_node]
+    while stack:
+        node = stack.pop()
+        if node not in visited:
+            visited.add(node)
+            componente.append(node)
+            for adj, _ in grafo.adj_list[node]:
+                if adj not in visited:
+                    stack.append(adj)
 
 def kosaraju(grafo: Grafo):
     if not grafo.direcionado:
@@ -62,9 +64,9 @@ def dijkstra(grafo, origem):
     distancias[origem] = 0
     visitados = set()
     fila = [(0, origem)]
-    heapify(fila)
+    heapq.heapify(fila)
     while fila:
-        dist, atual = heappop(fila)
+        dist, atual = heapq.heappop(fila)
         if atual in visitados:
             continue
         visitados.add(atual)
@@ -72,7 +74,7 @@ def dijkstra(grafo, origem):
             nova_dist = dist + peso
             if nova_dist < distancias[vizinho]:
                 distancias[vizinho] = nova_dist
-                heappush(fila, (nova_dist, vizinho))
+                heapq.heappush(fila, (nova_dist, vizinho))
     return distancias
 
 
@@ -88,10 +90,45 @@ def closeness_centrality(grafo, vertice):
         return 0
     return (len(dist) - 1) / soma
 
+def agm_componente(self, x):
+    """
+    Retorna a AGM da componente que contém x, e o custo total.
+    Só funciona em grafo não-direcionado.
+    """
+    if self.direcionado:
+        raise ValueError("AGM só em grafo não-direcionado.")
+    if x not in self.adj_list:
+        raise KeyError(f"Vértice {x} não existe.")
+
+    # 1) extrair componente conexa
+    visited = set()
+    componente = []
+    # você já tem dfs_componente; se estiver aqui no módulo, chame-a:
+    dfs_componente(self, x, visited, componente)
+
+    # 2) Prim a partir de x
+    visited = {x}
+    heap = [(peso, x, v) for v, peso in self.adj_list[x]]
+    heapq.heapify(heap)
+
+    mst = []
+    total = 0.0
+    while heap and len(visited) < len(componente):
+        peso, u, v = heapq.heappop(heap)
+        if v in visited:
+            continue
+        visited.add(v)
+        mst.append((u, v, peso))
+        total += peso
+        for w, pw in self.adj_list[v]:
+            if w not in visited:
+                heapq.heappush(heap, (pw, v, w))
+
+    return mst, total
 
 def betweenness_centrality(grafo):
     centralidade = {v: 0 for v in grafo.adj_list}
-    vertices = list(grafo.adj_list.keys())
+    vertices = list(grafo.adj_list.keys())[:100]#APENAS OS 100 PRIMEIROS VÉRTICES PARA EVITAR EXCESSO DE CÁLCULOS
     for s in vertices:
         dist = dijkstra(grafo, s)
         for t in vertices:
@@ -174,15 +211,6 @@ def main():
     print(
         f"\nNúmero de componentes conexas no grafo não-direcionado: {num_componentes}"
     )
-
-    # * ex3: AGM da componente contendo X
-    X = next(iter(grafo_nao_direcionado.adj_list))  # ou defina X explicitamente
-    mst_edges, mst_cost = grafo_nao_direcionado.agm_componente(X)
-    print(f"\nAGM da componente contendo '{X}':")
-    for u, v, p in mst_edges:
-        print(f"  {u} -- {v} (peso={p})")
-    print(f"Custo total da AGM: {mst_cost}")
-
     # CENTRALIDADE: GRAFO DIRECIONADO
     print("\n--- Centralidade no Grafo Direcionado ---")
     graus = {
@@ -214,8 +242,7 @@ def main():
     print("Top 10 Grau:")
     for v, val in sorted(graus_nd.items(), key=lambda x: x[1], reverse=True)[:10]:
         print(f"{v}: {val:.4f}")
-
-    proximidade_nd = {
+        proximidade_nd = {
         v: closeness_centrality(grafo_nao_direcionado, v)
         for v in list(grafo_nao_direcionado.adj_list)[:100]
     }
@@ -228,6 +255,14 @@ def main():
     for v, val in sorted(intermed_nd.items(), key=lambda x: x[1], reverse=True)[:10]:
         print(f"{v}: {val:.4f}")
 
+        
+    # * ex3: AGM da componente contendo X
+    X = next(iter(grafo_nao_direcionado.adj_list))  # ou defina X explicitamente
+    mst_edges, mst_cost = agm_componente(grafo_nao_direcionado, X)
+    print(f"\nAGM da componente contendo '{X}':")
+    for u, v, p in mst_edges:
+        print(f"  {u} -- {v} (peso={p})")
+    print(f"Custo total da AGM: {mst_cost}")
     
 
 

@@ -318,37 +318,3 @@ class Grafo:
         with open(file_path, "rb+") as f:
             return pickle.load(f)
 
-    def agm_componente(self, x):
-        """
-        Retorna a AGM da componente que contém x, e o custo total.
-        Só funciona em grafo não-direcionado.
-        """
-        if self.direcionado:
-            raise ValueError("AGM só em grafo não-direcionado.")
-        if x not in self.adj_list:
-            raise KeyError(f"Vértice {x} não existe.")
-
-        # 1) extrair componente conexa
-        visited = set()
-        componente = []
-        dfs_componente(self, x, visited, componente)
-
-        # 2) Prim a partir de x
-        visited = {x}
-        heap = [(peso, x, v) for v, peso in self.adj_list[x]]
-        heapq.heapify(heap)
-
-        mst = []
-        total = 0.0
-        while heap and len(visited) < len(componente):
-            peso, u, v = heapq.heappop(heap)
-            if v in visited:
-                continue
-            visited.add(v)
-            mst.append((u, v, peso))
-            total += peso
-            for w, pw in self.adj_list[v]:
-                if w not in visited:
-                    heapq.heappush(heap, (pw, v, w))
-
-        return mst, total
