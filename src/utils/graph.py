@@ -36,6 +36,11 @@ class Grafo:
         if u not in self.adj_list:
             self.adj_list[u] = []
             self.ordem += 1
+    def tem_vertice(self, u):
+        """
+        Verifica se um vértice existe no grafo.
+        """
+        return u in self.adj_list
 
     def adiciona_aresta(self, u, v, peso: float):
         """
@@ -49,9 +54,9 @@ class Grafo:
         if peso < 0:
             raise ValueError("Pesos negativos não são permitidos.")
 
-        if u not in self.adj_list:
+        if not self.tem_vertice(u):
             self.adiciona_vertice(u)
-        if v not in self.adj_list:
+        if not self.tem_vertice(v):
             self.adiciona_vertice(v)
 
         if not self.direcionado:
@@ -246,18 +251,15 @@ class Grafo:
         """
         if not self.direcionado:
             raise ValueError("Não é possível inverter um grafo não direcionado.")
-
+        
         grafo_invertido = Grafo(direcionado=True)
-
-        # Adiciona todos os vértices primeiro
         for vertice in self.adj_list.keys():
             grafo_invertido.adiciona_vertice(vertice)
 
-        # Inverte todas as arestas
         for u, vizinhos in self.adj_list.items():
             for v, peso in vizinhos:
                 grafo_invertido.adiciona_aresta(u=v, v=u, peso=peso)
-
+        
         return grafo_invertido
     
     def todos_os_graus(self):

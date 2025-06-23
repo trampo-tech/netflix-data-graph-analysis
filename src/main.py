@@ -1,11 +1,8 @@
 import polars as pl
 from utils.graph import Grafo
 import heapq
-import random
-import collections
-import multiprocessing
-from functools import partial
-
+from tqdm import tqdm
+import numpy as np
 
 def load_data(path):
     initial_df = pl.read_csv(path)
@@ -147,92 +144,68 @@ def agm_componente(self, x):
 
     return mst, total
 
+def centralidade_intermediacao(grafo: Grafo, u=None):
+    """
+    Calcula a centralidade de intermediação usando o algoritmo de Brandes.
+    Esta é uma versão externa à classe Grafo.
 
-def _brandes_centrality_subset(nodes_to_process, grafo):
-    """Helper function for multiprocessing. Calculates centrality for a subset of nodes."""
-    centrality = {v: 0.0 for v in grafo.adj_list}
-    
-    for s in nodes_to_process:
-        # Single-source shortest paths (SSSP)
-        S = []
-        P = {w: [] for w in grafo.adj_list}
-        sigma = {w: 0.0 for w in grafo.adj_list}
-        sigma[s] = 1.0
-        d = {w: -1 for w in grafo.adj_list}
-        d[s] = 0
-        
-        Q = collections.deque([s])
+    Args:
+        grafo (Grafo): O objeto do grafo a ser analisado.
+        u (any, optional): Se especificado, retorna a centralidade apenas para este vértice. Defaults to None.
 
-        while Q:
-            v = Q.popleft()
-            S.append(v)
-            # Assuming unweighted graph based on usage, peso=1
-            for w, _ in grafo.adj_list.get(v, []):
-                if d[w] < 0:
-                    Q.append(w)
-                    d[w] = d[v] + 1
-                if d[w] == d[v] + 1:
-                    sigma[w] += sigma[v]
-                    P[w].append(v)
-        
-        # Accumulation
-        delta = {w: 0.0 for w in grafo.adj_list}
-        while S:
-            w = S.pop()
-            for v in P[w]:
-                if sigma[w] != 0:
-                    delta[v] += (sigma[v] / sigma[w]) * (1.0 + delta[w])
-            if w != s:
-                centrality[w] += delta[w]
-                
-    return centrality
-
-def betweenness_centrality(grafo, k=None, normalized=True, endpoints=False):
-    """Brandes' algorithm for betweenness centrality, parallelized for CPU."""
+    Returns:
+        dict or float: Dicionário com a centralidade de todos os vértices ou o valor para o vértice 'u'.
+    """
+    bet = {v: 0.0 for v in grafo.adj_list}
     vertices = list(grafo.adj_list.keys())
-    if k is not None:
-        nodes_to_process = random.sample(vertices, k)
-    else:
-        nodes_to_process = vertices
 
-    try:
-        num_cores = multiprocessing.cpu_count()
-    except NotImplementedError:
-        num_cores = 1 # Fallback for environments where cpu_count is not available
+    for fonte in tqdm(vertices, desc="Calculando Intermediação"):
+        pilha = []
+        pais = {v: [] for v in vertices}
+        caminhos = {v: 0.0 for v in vertices}
+        caminhos[fonte] = 1.0
+        dist = {v: np.inf for v in vertices}
+        dist[fonte] = 0
+        fila = [(0, fonte)]
 
-    if num_cores <= 1 or len(nodes_to_process) < 100: # Don't parallelize for small workloads
-        # Run serially if only one core or small graph
-        centrality = _brandes_centrality_subset(nodes_to_process, grafo)
-    else:
-        # Split the nodes to process among the cores
-        chunk_size = max(1, len(nodes_to_process) // num_cores)
-        node_chunks = [nodes_to_process[i:i + chunk_size] for i in range(0, len(nodes_to_process), chunk_size)]
-
-        with multiprocessing.Pool(processes=num_cores) as pool:
-            worker_func = partial(_brandes_centrality_subset, grafo=grafo)
-            partial_centralities = pool.map(worker_func, node_chunks)
-
-        # Aggregate the results from all processes
-        centrality = {v: 0.0 for v in vertices}
-        for partial_result in partial_centralities:
-            for v, c in partial_result.items():
-                centrality[v] += c
-
-    # Normalization
-    if normalized:
-        n = len(vertices)
-        if n < 2:
-            return centrality
+        while fila:
+            d, v = heapq.heappop(fila)
+            if d > dist[v]:
+                continue
+            pilha.append(v)
+            for w, peso in grafo.adj_list.get(v, []):
+                nova_dist = dist[v] + peso
+                if nova_dist < dist[w]:
+                    dist[w] = nova_dist
+                    heapq.heappush(fila, (nova_dist, w))
+                    caminhos[w] = caminhos[v]
+                    pais[w] = [v]
+                elif nova_dist == dist[w]:
+                    caminhos[w] += caminhos[v]
+                    pais[w].append(v)
         
-        if grafo.direcionado:
-            scale = 1.0 / ((n - 1) * (n - 2)) if n > 2 else 1.0
-        else:
-            scale = 1.0 / (((n - 1) * (n - 2)) / 2.0) if n > 2 else 1.0
-            
-        for v in centrality:
-            centrality[v] *= scale
+        dep = {v: 0.0 for v in vertices}
+        while pilha:
+            w = pilha.pop()
+            for v_p in pais[w]:
+                if caminhos[w] != 0:
+                    fracao = (caminhos[v_p] / caminhos[w]) * (1 + dep[w])
+                    dep[v_p] += fracao
+            if w != fonte:
+                bet[w] += dep[w]
 
-    return centrality
+    n = grafo.ordem
+    if n > 2:
+        escala = 1 / ((n - 1) * (n - 2)) if grafo.direcionado else 2 / ((n - 1) * (n - 2))
+        for v in bet:
+            bet[v] *= escala
+
+    if u is None:
+        return bet
+    if not grafo.tem_vertice(u):
+        print(f"Vértice '{u}' não existe no grafo")
+        return None
+    return bet.get(u)
 
 def contar_componentes_conexas(grafo: Grafo) -> int:
     if grafo.direcionado:
@@ -305,10 +278,7 @@ def main():
     for v, val in sorted(proximidade.items(), key=lambda x: x[1], reverse=True)[:10]:
         print(f"{v}: {val:.4f}")
 
-    intermed = betweenness_centrality(grafo_direcionado)
-    print("\nTop 10 Intermediação:")
-    for v, val in sorted(intermed.items(), key=lambda x: x[1], reverse=True)[:10]:
-        print(f"{v}: {val:.4f}")
+    
 
     # CENTRALIDADE: GRAFO NÃO-DIRECIONADO
     print("\n--- Centralidade no Grafo Não-Direcionado ---")
@@ -327,7 +297,12 @@ def main():
     for v, val in sorted(proximidade_nd.items(), key=lambda x: x[1], reverse=True)[:10]:
         print(f"{v}: {val:.4f}")
 
-    intermed_nd = betweenness_centrality(grafo_nao_direcionado)
+    intermed = centralidade_intermediacao(grafo_direcionado)
+    print("\nTop 10 Intermediação:")
+    for v, val in sorted(intermed.items(), key=lambda x: x[1], reverse=True)[:10]:
+        print(f"{v}: {val:.4f}")
+
+    intermed_nd = centralidade_intermediacao(grafo_nao_direcionado)
     print("\nTop 10 Intermediação:")
     for v, val in sorted(intermed_nd.items(), key=lambda x: x[1], reverse=True)[:10]:
         print(f"{v}: {val:.4f}")
