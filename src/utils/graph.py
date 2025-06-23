@@ -36,6 +36,11 @@ class Grafo:
         if u not in self.adj_list:
             self.adj_list[u] = []
             self.ordem += 1
+    def tem_vertice(self, u):
+        """
+        Verifica se um vértice existe no grafo.
+        """
+        return u in self.adj_list
 
     def adiciona_aresta(self, u, v, peso: float):
         """
@@ -49,9 +54,9 @@ class Grafo:
         if peso < 0:
             raise ValueError("Pesos negativos não são permitidos.")
 
-        if u not in self.adj_list:
+        if not self.tem_vertice(u):
             self.adiciona_vertice(u)
-        if v not in self.adj_list:
+        if not self.tem_vertice(v):
             self.adiciona_vertice(v)
 
         if not self.direcionado:
@@ -246,19 +251,51 @@ class Grafo:
         """
         if not self.direcionado:
             raise ValueError("Não é possível inverter um grafo não direcionado.")
-
+        
         grafo_invertido = Grafo(direcionado=True)
-
-        # Adiciona todos os vértices primeiro
         for vertice in self.adj_list.keys():
             grafo_invertido.adiciona_vertice(vertice)
 
-        # Inverte todas as arestas
         for u, vizinhos in self.adj_list.items():
             for v, peso in vizinhos:
                 grafo_invertido.adiciona_aresta(u=v, v=u, peso=peso)
-
+        
         return grafo_invertido
+    
+    def todos_os_graus(self):
+        """
+        Returns:
+            dict: Dicionário com os graus de cada vértice.
+                Para grafos direcionados: {'vertice': {'entrada': int, 'saida': int, 'total': int}}
+                Para grafos não-direcionados: {'vertice': int}
+        """
+        if self.direcionado:
+            graus_entrada = defaultdict(int)
+            graus_saida = {}
+            
+            # única passada pela lista de adjacências para calcular tudo
+            for u, vizinhos in self.adj_list.items():
+                graus_saida[u] = len(vizinhos)
+                
+                for v, _ in vizinhos:
+                    graus_entrada[v] += 1
+            
+            resultado = {}
+            for vertice in self.adj_list.keys():
+                entrada = graus_entrada[vertice]
+                saida = graus_saida[vertice]
+                resultado[vertice] = {
+                    'entrada': entrada,
+                    'saida': saida,
+                    'total': entrada + saida
+                }
+            
+            return resultado
+        
+        else:
+            # Para grafos não-direcionados, grau = número de vizinhos
+            return {u: len(vizinhos) for u, vizinhos in self.adj_list.items()}
+
 
     def pickle_graph(self, file_path: str):
         """
@@ -283,37 +320,3 @@ class Grafo:
         with open(file_path, "rb+") as f:
             return pickle.load(f)
 
-    def agm_componente(self, x):
-        """
-        Retorna a AGM da componente que contém x, e o custo total.
-        Só funciona em grafo não-direcionado.
-        """
-        if self.direcionado:
-            raise ValueError("AGM só em grafo não-direcionado.")
-        if x not in self.adj_list:
-            raise KeyError(f"Vértice {x} não existe.")
-
-        # 1) extrair componente conexa
-        visited = set()
-        componente = []
-        dfs_componente(self, x, visited, componente)
-
-        # 2) Prim a partir de x
-        visited = {x}
-        heap = [(peso, x, v) for v, peso in self.adj_list[x]]
-        heapq.heapify(heap)
-
-        mst = []
-        total = 0.0
-        while heap and len(visited) < len(componente):
-            peso, u, v = heapq.heappop(heap)
-            if v in visited:
-                continue
-            visited.add(v)
-            mst.append((u, v, peso))
-            total += peso
-            for w, pw in self.adj_list[v]:
-                if w not in visited:
-                    heapq.heappush(heap, (pw, v, w))
-
-        return mst, total

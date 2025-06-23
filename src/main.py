@@ -1,9 +1,8 @@
-# %%
 import polars as pl
 from utils.graph import Grafo
-from itertools import combinations
-from heapq import heappush, heappop, heapify
-
+import heapq
+from tqdm import tqdm
+import numpy as np
 
 def load_data(path):
     initial_df = pl.read_csv(path)
@@ -31,12 +30,15 @@ def dfs_order(grafo: Grafo, source_node, visited, stack):
 
 
 def dfs_componente(grafo: Grafo, source_node, visited, componente):
-    visited.add(source_node)
-    componente.append(source_node)
-    for adj, _ in grafo.adj_list[source_node]:
-        if adj not in visited:
-            dfs_componente(grafo, adj, visited, componente)
-
+    stack = [source_node]
+    while stack:
+        node = stack.pop()
+        if node not in visited:
+            visited.add(node)
+            componente.append(node)
+            for adj, _ in grafo.adj_list[node]:
+                if adj not in visited:
+                    stack.append(adj)
 
 def kosaraju(grafo: Grafo):
     if not grafo.direcionado:
@@ -63,9 +65,9 @@ def dijkstra(grafo, origem):
     distancias[origem] = 0
     visitados = set()
     fila = [(0, origem)]
-    heapify(fila)
+    heapq.heapify(fila)
     while fila:
-        dist, atual = heappop(fila)
+        dist, atual = heapq.heappop(fila)
         if atual in visitados:
             continue
         visitados.add(atual)
@@ -73,7 +75,7 @@ def dijkstra(grafo, origem):
             nova_dist = dist + peso
             if nova_dist < distancias[vizinho]:
                 distancias[vizinho] = nova_dist
-                heappush(fila, (nova_dist, vizinho))
+                heapq.heappush(fila, (nova_dist, vizinho))
     return distancias
 
 
@@ -84,38 +86,126 @@ def degree_centrality(grafo, vertice):
 
 def closeness_centrality(grafo, vertice):
     dist = dijkstra(grafo, vertice)
-    soma = sum(d for d in dist.values() if d != float("inf") and d > 0)
-    if soma == 0:
-        return 0
-    return (len(dist) - 1) / soma
 
+    reachable_dists = [d for d in dist.values() if d != float("inf")]
+    n_reachable = len(reachable_dists)
 
-def betweenness_centrality(grafo):
-    centralidade = {v: 0 for v in grafo.adj_list}
+    if n_reachable <= 1:
+        return 0.0
+
+    soma_dist = sum(reachable_dists)
+    if soma_dist == 0:
+        return 0.0
+
+    closeness = (n_reachable - 1) / soma_dist
+
+    n_total = len(grafo.adj_list)
+    if n_total > 1:
+        normalization_factor = (n_reachable - 1) / (n_total - 1)
+        normalized_closeness = closeness * normalization_factor
+    else:
+        normalized_closeness = 0.0
+
+    return normalized_closeness
+
+def agm_componente(self, x):
+    """
+    Retorna a AGM da componente que contém x, e o custo total.
+    Só funciona em grafo não-direcionado.
+    """
+    if self.direcionado:
+        raise ValueError("AGM só em grafo não-direcionado.")
+    if x not in self.adj_list:
+        raise KeyError(f"Vértice {x} não existe.")
+
+    # 1) extrair componente conexa
+    visited = set()
+    componente = []
+    # você já tem dfs_componente; se estiver aqui no módulo, chame-a:
+    dfs_componente(self, x, visited, componente)
+
+    # 2) Prim a partir de x
+    visited = {x}
+    heap = [(peso, x, v) for v, peso in self.adj_list[x]]
+    heapq.heapify(heap)
+
+    mst = []
+    total = 0.0
+    while heap and len(visited) < len(componente):
+        peso, u, v = heapq.heappop(heap)
+        if v in visited:
+            continue
+        visited.add(v)
+        mst.append((u, v, peso))
+        total += peso
+        for w, pw in self.adj_list[v]:
+            if w not in visited:
+                heapq.heappush(heap, (pw, v, w))
+
+    return mst, total
+
+def centralidade_intermediacao(grafo: Grafo, u=None):
+    """
+    Calcula a centralidade de intermediação usando o algoritmo de Brandes.
+    Esta é uma versão externa à classe Grafo.
+
+    Args:
+        grafo (Grafo): O objeto do grafo a ser analisado.
+        u (any, optional): Se especificado, retorna a centralidade apenas para este vértice. Defaults to None.
+
+    Returns:
+        dict or float: Dicionário com a centralidade de todos os vértices ou o valor para o vértice 'u'.
+    """
+    bet = {v: 0.0 for v in grafo.adj_list}
     vertices = list(grafo.adj_list.keys())
-    for s in vertices:
-        dist = dijkstra(grafo, s)
-        for t in vertices:
-            if s == t or dist[t] == float("inf"):
+
+    for fonte in tqdm(vertices, desc="Calculando Intermediação"):
+        pilha = []
+        pais = {v: [] for v in vertices}
+        caminhos = {v: 0.0 for v in vertices}
+        caminhos[fonte] = 1.0
+        dist = {v: np.inf for v in vertices}
+        dist[fonte] = 0
+        fila = [(0, fonte)]
+
+        while fila:
+            d, v = heapq.heappop(fila)
+            if d > dist[v]:
                 continue
-            caminho = [t]
-            atual = t
-            while atual != s:
-                anterior = min(
-                    (n for n, _ in grafo.adj_list[atual]),
-                    key=lambda n: dist.get(n, float("inf")),
-                    default=None,
-                )
-                if anterior is None or dist[anterior] >= dist[atual]:
-                    break
-                caminho.append(anterior)
-                atual = anterior
-            for nodo in caminho[1:-1]:
-                centralidade[nodo] += 1
-    normalizador = ((len(vertices) - 1) * (len(vertices) - 2)) / 2
-    for v in centralidade:
-        centralidade[v] /= normalizador if normalizador else 1
-    return centralidade
+            pilha.append(v)
+            for w, peso in grafo.adj_list.get(v, []):
+                nova_dist = dist[v] + peso
+                if nova_dist < dist[w]:
+                    dist[w] = nova_dist
+                    heapq.heappush(fila, (nova_dist, w))
+                    caminhos[w] = caminhos[v]
+                    pais[w] = [v]
+                elif nova_dist == dist[w]:
+                    caminhos[w] += caminhos[v]
+                    pais[w].append(v)
+        
+        dep = {v: 0.0 for v in vertices}
+        while pilha:
+            w = pilha.pop()
+            for v_p in pais[w]:
+                if caminhos[w] != 0:
+                    fracao = (caminhos[v_p] / caminhos[w]) * (1 + dep[w])
+                    dep[v_p] += fracao
+            if w != fonte:
+                bet[w] += dep[w]
+
+    n = grafo.ordem
+    if n > 2:
+        escala = 1 / ((n - 1) * (n - 2)) if grafo.direcionado else 2 / ((n - 1) * (n - 2))
+        for v in bet:
+            bet[v] *= escala
+
+    if u is None:
+        return bet
+    if not grafo.tem_vertice(u):
+        print(f"Vértice '{u}' não existe no grafo")
+        return None
+    return bet.get(u)
 
 def contar_componentes_conexas(grafo: Grafo) -> int:
     if grafo.direcionado:
@@ -139,11 +229,9 @@ def contar_componentes_conexas(grafo: Grafo) -> int:
     return componentes
 
 
-# %%
 def main():
     # * Carregar dados
     df = load_data("data/netflix_amazon_disney_titles.csv")
-    print(df.head())
 
     # * ex1 criação dos grafos
     df_exploded = df.explode(columns=["director"]).explode(columns="cast")
@@ -158,9 +246,9 @@ def main():
         elenco = row["cast"]
         if len(elenco) < 2:
             continue
-        for i in range(len(elenco)):
+        for i, ator_i in enumerate(elenco):
             for j in range(i + 1, len(elenco)):
-                grafo_nao_direcionado.adiciona_aresta(elenco[i], elenco[j], peso=1)
+                grafo_nao_direcionado.adiciona_aresta(ator_i, elenco[j], peso=1)
 
     print(f"Vértices (não-direcionado): {grafo_nao_direcionado.ordem}")
     print(f"Arestas (não-direcionado): {grafo_nao_direcionado.tamanho}")
@@ -168,23 +256,11 @@ def main():
     #* ex2 Componentes
     componentes = kosaraju(grafo=grafo_direcionado)
     print(f"Número de componentes fortemente conexas: {len(componentes)}")
-    print("Componentes com mais de 1 vértice:")
-    for componente in componentes:
-        if len(componente) > 1:
-            print(componente)
+
     num_componentes = contar_componentes_conexas(grafo_nao_direcionado)
     print(
         f"\nNúmero de componentes conexas no grafo não-direcionado: {num_componentes}"
     )
-
-    # * ex3: AGM da componente contendo X
-    X = next(iter(grafo_nao_direcionado.adj_list))  # ou defina X explicitamente
-    mst_edges, mst_cost = grafo_nao_direcionado.agm_componente(X)
-    print(f"\nAGM da componente contendo '{X}':")
-    for u, v, p in mst_edges:
-        print(f"  {u} -- {v} (peso={p})")
-    print(f"Custo total da AGM: {mst_cost}")
-
     # CENTRALIDADE: GRAFO DIRECIONADO
     print("\n--- Centralidade no Grafo Direcionado ---")
     graus = {
@@ -202,10 +278,7 @@ def main():
     for v, val in sorted(proximidade.items(), key=lambda x: x[1], reverse=True)[:10]:
         print(f"{v}: {val:.4f}")
 
-    intermed = betweenness_centrality(grafo_direcionado)
-    print("\nTop 10 Intermediação:")
-    for v, val in sorted(intermed.items(), key=lambda x: x[1], reverse=True)[:10]:
-        print(f"{v}: {val:.4f}")
+    
 
     # CENTRALIDADE: GRAFO NÃO-DIRECIONADO
     print("\n--- Centralidade no Grafo Não-Direcionado ---")
@@ -216,23 +289,33 @@ def main():
     print("Top 10 Grau:")
     for v, val in sorted(graus_nd.items(), key=lambda x: x[1], reverse=True)[:10]:
         print(f"{v}: {val:.4f}")
-
     proximidade_nd = {
-        v: closeness_centrality(grafo_nao_direcionado, v)
-        for v in list(grafo_nao_direcionado.adj_list)[:100]
-    }
+    v: closeness_centrality(grafo_nao_direcionado, v)
+    for v in list(grafo_nao_direcionado.adj_list)[:100]
+}
     print("\nTop 10 Proximidade:")
     for v, val in sorted(proximidade_nd.items(), key=lambda x: x[1], reverse=True)[:10]:
         print(f"{v}: {val:.4f}")
 
-    intermed_nd = betweenness_centrality(grafo_nao_direcionado)
+    intermed = centralidade_intermediacao(grafo_direcionado)
+    print("\nTop 10 Intermediação:")
+    for v, val in sorted(intermed.items(), key=lambda x: x[1], reverse=True)[:10]:
+        print(f"{v}: {val:.4f}")
+
+    intermed_nd = centralidade_intermediacao(grafo_nao_direcionado)
     print("\nTop 10 Intermediação:")
     for v, val in sorted(intermed_nd.items(), key=lambda x: x[1], reverse=True)[:10]:
         print(f"{v}: {val:.4f}")
 
+        
+    # * ex3: AGM da componente contendo X
+    X = next(iter(grafo_nao_direcionado.adj_list))  # ou defina X explicitamente
+    _, mst_cost = agm_componente(grafo_nao_direcionado, X)
+    print(f"\nAGM da componente contendo '{X}':")
+    # for u, v, p in mst_edges:
+    #     print(f"  {u} -- {v} (peso={p})")
+    print(f"Custo total da AGM: {mst_cost}")
     
 
 
-# %%
 main()
-# %%
